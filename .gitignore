@@ -1,6 +1,10 @@
 _build/
 data/munching/
-
+basic_exports.sh
+data/
+fm_data_tasks.sqlite
+outputs/
+poetry.lock
 *._*
 # Pickle Saved
 *.pt

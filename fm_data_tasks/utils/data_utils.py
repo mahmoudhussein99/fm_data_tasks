@@ -33,7 +33,7 @@ def serialize_row(
         if str(row[c_og]) == "nan":
             row[c_og] = nan_tok
         else:
-            row[c_og] = f"{row[c_og].strip()}"
+            row[c_og] = f"{str(row[c_og]).strip()}"
         res.append(f"{c_map}: {row[c_og]}".lstrip())
     if len(sep_tok) > 0 and sep_tok != ".":
         sep_tok = f" {sep_tok}"
@@ -135,6 +135,40 @@ def serialize_schema_match(
     if add_prefix:
         res = f"{instruction}\n\n{res}"
     return res
+def read_wdc_pairs(
+    split_path: str,
+    add_instruction: bool,
+    instruction: str,
+    suffix: str,
+    prod_name: str,
+    sep_tok: str,
+    nan_tok: str,  
+) -> pd.DataFrame:
+    
+
+    columns = ['id','title','description','brand']
+    column_mapA = {f"{c}_A": c for c in columns if c != "id"}
+    column_mapB = {f"{c}_B": c for c in columns if c != "id"}
+    merged = pd.read_csv(split_path,index_col=False,encoding='utf-8')
+
+    merged["text"] = merged.apply(
+        lambda row: serialize_match_pair(
+            row,
+            column_mapA,
+            column_mapB,
+            add_instruction,
+            instruction,
+            suffix,
+            prod_name,
+            sep_tok,
+            nan_tok,
+        ),
+        axis=1,
+    )
+    merged["label_str"] = merged.apply(
+        lambda row: "Yes\n" if row["label"] == 1 else "No\n", axis=1
+    )
+    return merged
 
 
 def read_blocked_pairs(
@@ -344,24 +378,35 @@ def read_raw_data(
         test_file = data_dir_p / "test.csv"
         tableA_file = data_dir_p / "tableA.csv"
         tableB_file = data_dir_p / "tableB.csv"
-
-        tableA = pd.read_csv(tableA_file)
-        tableB = pd.read_csv(tableB_file)
-
+        is_wdc= ((data_dir.split('/')[-1]).split('-')[0] )=='WDC'
         label_col = "label"
-        read_data_func = partial(
-            read_blocked_pairs,
-            tableA=tableA,
-            tableB=tableB,
-            cols_to_drop=cols_to_drop,
-            col_renaming=col_renaming,
-            add_instruction=add_instruction,
-            instruction=instruction,
-            suffix=suffix,
-            prod_name=constants.MATCH_PROD_NAME[data_dir],
-            sep_tok=sep_tok,
-            nan_tok=nan_tok,
-        )
+
+        if is_wdc:
+            read_data_func=partial(
+                read_wdc_pairs,
+                add_instruction=add_instruction,
+                instruction=instruction,
+                suffix=suffix,
+                prod_name=constants.MATCH_PROD_NAME[data_dir],
+                sep_tok=sep_tok,
+                nan_tok=nan_tok,
+            )
+        else:
+            tableA = pd.read_csv(tableA_file)
+            tableB = pd.read_csv(tableB_file)
+            read_data_func = partial(
+                read_blocked_pairs,
+                tableA=tableA,
+                tableB=tableB,
+                cols_to_drop=cols_to_drop,
+                col_renaming=col_renaming,
+                add_instruction=add_instruction,
+                instruction=instruction,
+                suffix=suffix,
+                prod_name=constants.MATCH_PROD_NAME[data_dir],
+                sep_tok=sep_tok,
+                nan_tok=nan_tok,
+            )
     elif task == "data_imputation":
         train_file = data_dir_p / "train.csv"
         valid_file = data_dir_p / "valid.csv"

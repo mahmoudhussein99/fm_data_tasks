@@ -22,10 +22,12 @@ Install:
 pip install poetry
 poetry install
 poetry run pre-commit install
+pip install manifest-ml
 ```
 or
 ```
 make install
+pip install manifest-ml
 ```
 
 Download and unpack the data:

@@ -6,6 +6,7 @@ from pathlib import Path
 
 import numpy as np
 from manifest import Manifest
+from manifest.connections.client_pool import ClientConnection
 
 import fm_data_tasks.utils.data_utils as data_utils
 import fm_data_tasks.utils.prompt_utils as prompt_utils
@@ -119,13 +120,19 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry_run", help="Dry run. Do not actually ping model.", action="store_true"
     )
+    parser.add_argument(
+        "--use_local_model", help="use Llama 3.1 to run locally", action="store_true"
+    )
+    parser.add_argument(
+        "--local_model_port", help="port local model running on", type=int, default=5000
+    )
 
     parser.add_argument(
         "--stop_token", help="Token to stop on for a given generated response", default="\n"
     )
 
     # Model args
-    parser.add_argument("--temperature", type=float, help="Temperature.", default=0.0)
+    parser.add_argument("--temperature", type=float, help="Temperature.", default=0.07)
     parser.add_argument(
         "--max_tokens", type=int, help="Max tokens to generate.", default=3
     )
@@ -175,12 +182,26 @@ def main():
     logger.info(f"Train shape is {train_data.shape[0]}")
     logger.info(f"Test shape is {test_data.shape[0]}")
     logger.info(f"Running {num_run} examples for {args.num_trials} trials.")
-
+    client_connection2 = ClientConnection(client_name=args.client_name, engine="gpt-3.5-turbo-instruct")
+    if args.use_local_model:
+        manifest = Manifest(
+            client_name = "huggingface",
+            client_connection = f"http://127.0.0.1:{args.local_model_port}",
+            # cache_name='sqlite',
+            # cache_connection='unifdt.sqlite',
+            # stop_token='\n',
+            temperature=args.temperature,
+            max_tokens=args.max_tokens,
+            top_p=1.0,
+            n=1,
+        )
     # Setup manifest
-    manifest = Manifest(
+    else:
+        manifest = Manifest(
         cache_name=args.cache_name,
         cache_connection=args.cache_connection,
-        client_name=args.client_name,
+        # client_name=args.client_name,
+        client_pool=[ client_connection2],
         client_connection=args.client_connection,
         stop_token=args.stop_token,
         temperature=args.temperature,
@@ -229,13 +250,15 @@ def main():
                 pred = manifest.run(
                     prompt(queries[idx]), overwrite_cache=args.overwrite_cache
                 )
+                pred = pred.split("\n")[0]
+                # print(f"BRO I GOT A PRED:: {pred}")
             else:
                 pred = ""
             preds.append(pred)
             logger.info(f"====> {pred} <====")
             idx += 1
 
-        # Send to model for predictions
+        # Send to model for predictioq ns
         if not args.dry_run:
             for query in queries[idx:num_run]:
                 preds.append(
@@ -252,7 +275,10 @@ def main():
         gt = gt[:num_run]
         save_data["preds"] = preds
         save_data["queries"] = queries[:num_run]
-
+        # print("BRO HERE IS GT:: ")
+        # print(gt)
+        # print("BRO HERE IS Pred:: ")
+        # print(preds)
         prec, rec, acc, f1 = compute_metrics(preds, gt, task)
 
         logger.info(
